@@ -60,6 +60,11 @@ pub struct CommonBus<BUS> {
     busy: AtomicBool,
 }
 
+pub struct BusProxy<'a, BUS> {
+    manager: &'a CommonBus<BUS>,
+    mode: spi::Mode,
+}
+
 impl<BUS> CommonBus<BUS> {
     pub fn new(bus: BUS) -> Self {
         CommonBus {
@@ -83,8 +88,11 @@ impl<BUS> CommonBus<BUS> {
         result
     }
 
-    pub fn acquire(&self) -> &Self {
-        self
+    pub fn acquire(&self, mode: spi::Mode) -> BusProxy<BUS> {
+        BusProxy {
+            manager: self,
+            mode,
+        }
     }
 }
 
@@ -122,6 +130,34 @@ impl<BUS: i2c::WriteRead> i2c::WriteRead for &CommonBus<BUS> {
 macro_rules! spi {
     ($($T:ty),*) => {
         $(
+        impl<BUS: blocking::spi::Write<$T>> blocking::spi::Write<$T> for BusProxy<'_, BUS> {
+            type Error = BUS::Error;
+
+            fn write(&mut self, words: &[$T]) -> Result<(), Self::Error> {
+                self.manager.lock(|bus| bus.write(words))
+            }
+        }
+
+        impl<BUS: blocking::spi::Transfer<$T>> blocking::spi::Transfer<$T> for BusProxy<'_, BUS> {
+            type Error = BUS::Error;
+
+            fn transfer<'w>(&mut self, words: &'w mut [$T]) -> Result<&'w [$T], Self::Error> {
+                self.manager.lock(move |bus| bus.transfer(words))
+            }
+        }
+
+        impl<BUS: spi::FullDuplex<$T>> spi::FullDuplex<$T> for BusProxy<'_, BUS> {
+            type Error = BUS::Error;
+
+            fn read(&mut self) -> nb::Result<$T, Self::Error> {
+                self.manager.lock(|bus| bus.read())
+            }
+
+            fn send(&mut self, word: $T) -> nb::Result<(), Self::Error> {
+                self.manager.lock(|bus| bus.send(word))
+            }
+        }
+
         impl<BUS: blocking::spi::Write<$T>> blocking::spi::Write<$T> for &CommonBus<BUS> {
             type Error = BUS::Error;
 
