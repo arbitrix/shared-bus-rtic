@@ -1,59 +1,21 @@
 #![no_std]
-//! # Introduction
-//! This crate provides a means of sharing an I2C or SPI bus between multiple drivers.
-//!
-//! ## Notice
-//! Note that all of the drivers that use the same underlying bus **must** be stored within a single
-//! resource (e.g. as one larger `struct`) within the RTIC resources. This ensures that RTIC will
-//! prevent one driver from interrupting another while they are using the same underlying bus.
-//!
-//! This crate also provides convenience types for working with `shared-bus` RTIC resources.
-//!
-//! ## Usage Example
-//! ```rust
-//!
-//! use shared_bus_rtic::SharedBus;
-//!
-//! struct SharedBusResources<T> {
-//!     device: Device<SharedBus<T>>,
-//!     other_device: OtherDevice<SharedBus<T>>,
-//! }
-//!
-//! // ...
-//!
-//! // Replace this type with the type of your bus (e.g. hal::i2c::I2c<...>).
-//! type BusType = ();
-//!
-//! struct Resources {
-//!     shared_bus_resources: SharedBusResources<BusType>,
-//! }
-//!
-//! #[init]
-//! fn init(c: init::Context) -> init::LateResources {
-//!     // TODO: Define your custom bus here.
-//!     let bus: BusType = ();
-//!
-//!     // Construct the bus manager.
-//!     let manager = shared_bus_rtic::new!(bus, BusType);
-//!
-//!     // Construct all of your devices that use the shared bus.
-//!     let device = Device::new(manager.acquire());
-//!     let other_device = OtherDevice::new(manager.acquire());
-//!
-//!     init::LateResources {
-//!         shared_bus_resources: SharedBusResources { device, other_device },
-//!     }
-//! }
-//! ```
+
+extern crate atsamd_hal as hal;
 
 use core::sync::atomic::{AtomicBool, Ordering};
-use embedded_hal::{
-    blocking::{self, i2c},
-    spi,
-};
+use embedded_hal::{blocking, spi};
+use hal::sercom::v2::spi::{Spi, ValidConfig};
 
 /// A convenience type to use for declaring the underlying bus type.
 pub type SharedBus<T> = &'static CommonBus<T>;
+
+// pub struct Test {
+//     test: sercom::v2::spi::Spi<impl spi::ValidConfig>,
+// }
+
+//type Bla<C> = hal::hal::sercom::v2::spi::Spi<C>;
+
+type ValidSpi<C: ValidConfig> = Spi<C>;
 
 pub struct CommonBus<BUS> {
     bus: core::cell::UnsafeCell<BUS>,
@@ -97,35 +59,6 @@ impl<BUS> CommonBus<BUS> {
 }
 
 unsafe impl<BUS> Sync for CommonBus<BUS> {}
-
-impl<BUS: i2c::Read> i2c::Read for &CommonBus<BUS> {
-    type Error = BUS::Error;
-
-    fn read(&mut self, address: u8, buffer: &mut [u8]) -> Result<(), Self::Error> {
-        self.lock(|bus| bus.read(address, buffer))
-    }
-}
-
-impl<BUS: i2c::Write> i2c::Write for &CommonBus<BUS> {
-    type Error = BUS::Error;
-
-    fn write(&mut self, address: u8, buffer: &[u8]) -> Result<(), Self::Error> {
-        self.lock(|bus| bus.write(address, buffer))
-    }
-}
-
-impl<BUS: i2c::WriteRead> i2c::WriteRead for &CommonBus<BUS> {
-    type Error = BUS::Error;
-
-    fn write_read(
-        &mut self,
-        address: u8,
-        bytes: &[u8],
-        buffer: &mut [u8],
-    ) -> Result<(), Self::Error> {
-        self.lock(|bus| bus.write_read(address, bytes, buffer))
-    }
-}
 
 macro_rules! spi {
     ($($T:ty),*) => {

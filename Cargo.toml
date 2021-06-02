@@ -15,9 +15,25 @@ license = "MIT"
 readme = "README.md"
 
 [dependencies]
+cortex-m = { version = "0.6", optional = true }
 embedded-hal = "0.2.4"
 nb = "1.0.0"
-cortex-m = { version = "0.6", optional = true }
+
+[dependencies.atsamd-hal]
+version = "0.12"
+#features = ["samd21g"]
+path="../atsamd/hal"
+default-features = false
+
+[dependencies.cortex-m-rt]
+version = "0.6.12"
+optional = true
+
+#[dependencies.panic-halt]
+#version = "0.2"
+#optional = true
 
 [features]
 thumbv6 = ["cortex-m"]
+default = ["rt", "atsamd-hal/samd21g"]
+rt = ["cortex-m-rt", "atsamd-hal/samd21g-rt"]
